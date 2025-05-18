@@ -1,1 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Task Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Tailwind gray-100 */
+        }
+        .kanban-column {
+            min-height: 300px; /* Minimum height for columns */
+            background-color: #e5e7eb; /* Tailwind gray-200 */
+            border-radius: 0.5rem; /* Tailwind rounded-lg */
+            padding: 1rem; /* Tailwind p-4 */
+            margin: 0.5rem; /* Tailwind m-2 */
+            flex: 1; /* Allow columns to grow equally */
+            display: flex;
+            flex-direction: column;
+        }
+        .kanban-column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem; /* Tailwind mb-4 */
+        }
+        .kanban-column-title {
+            font-size: 1.25rem; /* Tailwind text-xl */
+            font-weight: 600; /* Tailwind font-semibold */
+            color: #1f2937; /* Tailwind gray-800 */
+        }
+        .task {
+            background-color: #ffffff; /* White */
+            border: 1px solid #d1d5db; /* Tailwind gray-300 */
+            border-radius: 0.375rem; /* Tailwind rounded-md */
+            padding: 0.75rem; /* Tailwind p-3 */
+            margin-bottom: 0.5rem; /* Tailwind mb-2 */
+            cursor: grab;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); /* Tailwind shadow-sm */
+            transition: background-color 0.2s ease;
+        }
+        .task:hover {
+            background-color: #f9fafb; /* Tailwind gray-50 */
+        }
+        .task.dragging {
+            opacity: 0.5;
+            background-color: #dbeafe; /* Tailwind blue-100 */
+        }
+        .add-task-container {
+            background-color: #ffffff;
+            padding: 1.5rem; /* Tailwind p-6 */
+            border-radius: 0.5rem; /* Tailwind rounded-lg */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* Tailwind shadow-md */
+            margin-bottom: 2rem; /* Tailwind mb-8 */
+        }
+        .form-input {
+            border: 1px solid #d1d5db; /* Tailwind gray-300 */
+            border-radius: 0.375rem; /* Tailwind rounded-md */
+            padding: 0.5rem 0.75rem; /* Tailwind px-3 py-2 */
+            width: 100%;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: #2563eb; /* Tailwind blue-600 */
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25); /* Tailwind ring-blue-500 (customized alpha) */
+        }
+        .btn {
+            font-weight: 500; /* Tailwind font-medium */
+            padding: 0.625rem 1.25rem; /* Tailwind px-5 py-2.5 */
+            border-radius: 0.375rem; /* Tailwind rounded-md */
+            transition: background-color 0.2s ease;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background-color: #2563eb; /* Tailwind blue-600 */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #1d4ed8; /* Tailwind blue-700 */
+        }
+        .btn-danger {
+            background-color: #dc2626; /* Tailwind red-600 */
+            color: white;
+            font-size: 0.875rem; /* Tailwind text-sm */
+            padding: 0.375rem 0.75rem; /* Tailwind px-3 py-1.5 */
+        }
+        .btn-danger:hover {
+            background-color: #b91c1c; /* Tailwind red-700 */
+        }
+        /* Styles for the confetti canvas */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Make sure it doesn't interfere with other elements */
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="container mx-auto max-w-6xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800">Kanban Task Tracker</h1>
+        </header>
+
+        <div class="add-task-container">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Add New Task</h2>
+            <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+                <div class="flex-grow">
+                    <label for="task-input" class="block text-sm font-medium text-gray-700 mb-1">Task Description</label>
+                    <input type="text" id="task-input" class="form-input" placeholder="Enter task description...">
+                </div>
+                <button id="add-task-btn" class="btn btn-primary w-full sm:w-auto">Add Task</button>
+            </div>
+            <p id="task-error" class="text-red-500 text-sm mt-2 hidden">Task description cannot be empty.</p>
+        </div>
+
+        <div id="kanban-board" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div id="todo-column" class="kanban-column" data-column-id="todo">
+                <div class="kanban-column-header">
+                    <h2 class="kanban-column-title">To Do</h2>
+                </div>
+                <div class="tasks-container flex-grow" data-column-id="todo-tasks">
+                    </div>
+            </div>
+
+            <div id="inprogress-column" class="kanban-column" data-column-id="inprogress">
+                <div class="kanban-column-header">
+                    <h2 class="kanban-column-title">In Progress</h2>
+                </div>
+                <div class="tasks-container flex-grow" data-column-id="inprogress-tasks">
+                    </div>
+            </div>
+
+            <div id="done-column" class="kanban-column" data-column-id="done">
+                <div class="kanban-column-header">
+                    <h2 class="kanban-column-title">Done</h2>
+                    <button id="clear-done-btn" class="btn btn-danger">Clear Done</button>
+                </div>
+                <div class="tasks-container flex-grow" data-column-id="done-tasks">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+    <script>
+        // DOM Elements
+        const taskInput = document.getElementById('task-input');
+        const addTaskBtn = document.getElementById('add-task-btn');
+        const taskError = document.getElementById('task-error');
+        const columns = document.querySelectorAll('.kanban-column .tasks-container');
+        const kanbanBoard = document.getElementById('kanban-board');
+        const confettiCanvas = document.getElementById('confetti-canvas');
+        const clearDoneBtn = document.getElementById('clear-done-btn'); // New button
+
+        // Initialize Confetti
+        const myConfetti = confetti.create(confettiCanvas, {
+            resize: true,
+            useWorker: true
+        });
+
+        // --- Task Management ---
+
+        // Function to create a new task element
+        function createTaskElement(taskText, taskId) {
+            const task = document.createElement('div');
+            task.classList.add('task');
+            task.setAttribute('draggable', 'true');
+            task.setAttribute('id', taskId || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`); // More robust unique ID
+            task.textContent = taskText;
+
+            // Drag event listeners for the task
+            task.addEventListener('dragstart', handleDragStart);
+            task.addEventListener('dragend', handleDragEnd);
+
+            return task;
+        }
+
+        // Function to add a task to the "To Do" column
+        function addTask() {
+            const taskText = taskInput.value.trim();
+            if (taskText === '') {
+                taskError.classList.remove('hidden');
+                taskInput.focus();
+                return;
+            }
+            taskError.classList.add('hidden');
+
+            const newTask = createTaskElement(taskText);
+            document.querySelector('[data-column-id="todo-tasks"]').appendChild(newTask);
+            taskInput.value = ''; // Clear input
+            saveTasks();
+        }
+
+        // Event listener for adding a task
+        addTaskBtn.addEventListener('click', addTask);
+        taskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addTask();
+            }
+        });
+
+        // --- Drag and Drop Functionality ---
+        let draggedTask = null;
+
+        function handleDragStart(event) {
+            draggedTask = event.target;
+            event.dataTransfer.setData('text/plain', event.target.id);
+            setTimeout(() => {
+                if(event.target) { // Check if target still exists
+                    event.target.classList.add('dragging');
+                }
+            }, 0);
+        }
+
+        function handleDragEnd(event) {
+            if(event.target) { // Check if target still exists
+                 event.target.classList.remove('dragging');
+            }
+            draggedTask = null;
+        }
+
+        columns.forEach(column => {
+            column.addEventListener('dragover', handleDragOver);
+            column.addEventListener('dragenter', handleDragEnter);
+            column.addEventListener('dragleave', handleDragLeave);
+            column.addEventListener('drop', handleDrop);
+        });
+
+        function handleDragOver(event) {
+            event.preventDefault(); // Necessary to allow dropping
+        }
+
+        function handleDragEnter(event) {
+            event.preventDefault();
+            const targetContainer = event.target.closest('.tasks-container');
+            if (targetContainer) {
+                targetContainer.style.backgroundColor = '#d1d5db'; // Tailwind gray-300
+            }
+        }
+
+        function handleDragLeave(event) {
+            const targetContainer = event.target.closest('.tasks-container');
+            if (targetContainer) {
+                targetContainer.style.backgroundColor = ''; // Reset background
+            }
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            const targetColumnTasksContainer = event.target.closest('.tasks-container');
+
+            if (targetColumnTasksContainer && draggedTask) {
+                // Prevent dropping onto itself or its original container if it's not moving
+                if (draggedTask.parentElement !== targetColumnTasksContainer) {
+                    targetColumnTasksContainer.appendChild(draggedTask);
+                }
+                targetColumnTasksContainer.style.backgroundColor = ''; // Reset background
+
+                // Check if the task was dropped in the "Done" column
+                const parentColumn = targetColumnTasksContainer.closest('.kanban-column');
+                if (parentColumn && parentColumn.id === 'done-column') {
+                    triggerConfetti();
+                }
+                saveTasks(); // Save tasks after moving
+            }
+        }
+
+        // --- Confetti Animation ---
+        function triggerConfetti() {
+            myConfetti({
+                particleCount: 150,
+                spread: 80,
+                origin: { y: 0.6 }
+            });
+        }
+
+        // --- Clear Done Tasks ---
+        function clearDoneTasks() {
+            const doneTasksContainer = document.querySelector('[data-column-id="done-tasks"]');
+            if (doneTasksContainer) {
+                // Confirmation before clearing
+                if (confirm("Are you sure you want to clear all tasks from the 'Done' column?")) {
+                    doneTasksContainer.innerHTML = ''; // Remove all child task elements
+                    saveTasks(); // Update local storage
+                }
+            }
+        }
+
+        clearDoneBtn.addEventListener('click', clearDoneTasks);
+
+
+        // --- Local Storage for Persistence ---
+        function saveTasks() {
+            const tasksByColumn = {};
+            columns.forEach(columnContainer => {
+                const columnId = columnContainer.dataset.columnId.replace('-tasks', '');
+                tasksByColumn[columnId] = [];
+                columnContainer.querySelectorAll('.task').forEach(taskElement => {
+                    tasksByColumn[columnId].push({
+                        id: taskElement.id,
+                        text: taskElement.textContent
+                    });
+                });
+            });
+            localStorage.setItem('kanbanTasks', JSON.stringify(tasksByColumn));
+            // console.log("Tasks saved:", tasksByColumn); // For debugging
+        }
+
+        function loadTasks() {
+            const savedTasks = localStorage.getItem('kanbanTasks');
+            // console.log("Loading tasks from localStorage:", savedTasks); // For debugging
+            if (savedTasks) {
+                try {
+                    const tasksByColumn = JSON.parse(savedTasks);
+                    for (const columnId in tasksByColumn) {
+                        const columnTasksContainer = document.querySelector(`[data-column-id="${columnId}-tasks"]`);
+                        if (columnTasksContainer) {
+                            // Clear existing tasks in the column before loading (optional, but good for clean load)
+                            // columnTasksContainer.innerHTML = '';
+                            tasksByColumn[columnId].forEach(taskData => {
+                                if (taskData.text && taskData.id) { // Ensure task data is valid
+                                    const taskElement = createTaskElement(taskData.text, taskData.id);
+                                    columnTasksContainer.appendChild(taskElement);
+                                }
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error parsing tasks from localStorage:", error);
+                    // Optionally clear corrupted localStorage
+                    // localStorage.removeItem('kanbanTasks');
+                }
+            }
+        }
+
+        // Load tasks when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasks();
+        });
+
+    </script>
+</body>
+</html>
 
